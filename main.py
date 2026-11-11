@@ -270,7 +270,8 @@ def forecast(reads, name_max_rank=999):
 
 
 # ---- entry point -----------------------------------------------------------
-import os, sys
+import os
+
 
 def main():
     inp = os.environ.get("MAKEFUN_INPUT_DIR") or "/input"
@@ -285,6 +286,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "forecast.json"), "w") as f:
         json.dump({"probabilities": fc["probabilities"], "top10": fc["top10"]}, f)
+
 
 if __name__ == "__main__":
     main()
