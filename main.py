@@ -28,7 +28,6 @@ SHRINK_CELL = 3.0
 SHRINK_NEW = 150.0
 MAX_ROWS_PER_PLACE = 100
 
-
 def parse_at(s):
     """ISO 8601 UTC -> seconds since epoch (float). Avoids any local timezone."""
     s = s.strip()
@@ -44,7 +43,6 @@ def parse_at(s):
     hh, mm, ss = [int(x) for x in clock.split(":")]
     return _days_from_civil(y, mo, d) * 86400.0 + hh * 3600.0 + mm * 60.0 + ss + int(frac) / 1e6
 
-
 def _days_from_civil(y, m, d):
     y -= m <= 2
     era = (y if y >= 0 else y - 399) // 400
@@ -52,7 +50,6 @@ def _days_from_civil(y, m, d):
     doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
     doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
     return era * 146097 + doe - 719468
-
 
 def rank_group(j):
     if j <= 10:
@@ -73,7 +70,6 @@ def rank_group(j):
         return 17
     return 18
 
-
 def mom_bucket(m):
     if m is None:
         return 0
@@ -83,13 +79,11 @@ def mom_bucket(m):
             b += 1
     return b
 
-
 def bucket_of(h):
     for x, (lo, hi) in enumerate(BUCKETS):
         if lo <= h < hi:
             return x
     return None
-
 
 def load(reads):
     out = []
@@ -98,7 +92,6 @@ def load(reads):
                     {g["universe_id"]: g["rank"] for g in r["up_and_coming"]},
                     r))
     return out
-
 
 def features_at(cm, i):
     t_now, ra, _ = cm[i]
@@ -122,7 +115,6 @@ def features_at(cm, i):
         feats[u] = (rank_group(r), mom)
     return feats
 
-
 def transitions(cm):
     n = len(cm)
     nb = len(BUCKETS)
@@ -139,6 +131,9 @@ def transitions(cm):
             if bi is None:
                 continue
             rb = cm[b_i][1]
+            chart = cm[b_i][2]["up_and_coming"]
+            if not isinstance(chart, list) or len(chart) < 10:
+                continue
             for u, r in ra.items():
                 key1 = (feats[u][0],)
                 key2 = feats[u]
@@ -148,10 +143,7 @@ def transitions(cm):
                 if k is not None and k <= 10:
                     counts[bi][0][key1][k] += 1.0
                     counts[bi][1][key2][k] += 1.0
-            chart = cm[b_i][2]["up_and_coming"]
             for k in range(1, 11):
-                if k > len(chart):
-                    break
                 tot[bi][k] += 1.0
                 if chart[k - 1]["universe_id"] not in ra:
                     newc[bi][k] += 1.0
@@ -180,7 +172,6 @@ def transitions(cm):
         NEW.append([0.0] + [(newc[bi][k] + SHRINK_NEW * pooled) / (tot[bi][k] + SHRINK_NEW)
                             for k in range(1, 11)])
     return P, NEW
-
 
 def forecast(reads):
     cm = load(reads)
@@ -212,8 +203,13 @@ def forecast(reads):
             for u, v in items:
                 probs.append({"universe_id": u, "place": k, "p": round(v * f2, 8)})
     top10 = [g["universe_id"] for g in last["up_and_coming"][:10]]
+    if len(top10) < 10:
+        for j in range(i - 1, -1, -1):
+            prev_chart = cm[j][2]["up_and_coming"]
+            if isinstance(prev_chart, list) and len(prev_chart) >= 10:
+                top10 = [g["universe_id"] for g in prev_chart[:10]]
+                break
     return {"probabilities": probs, "top10": top10}
-
 
 def main():
     inp = os.environ.get("MAKEFUN_INPUT_DIR") or "/input"
@@ -226,14 +222,18 @@ def main():
             if not line:
                 continue
             r = json.loads(line)
-            if r.get("up_and_coming"):
-                reads.append(r)
+            chart = r.get("up_and_coming")
+            if not isinstance(chart, list) or not chart:
+                continue
+            reads.append(r)
     reads.sort(key=lambda r: r["at"])
-    fc = forecast(reads)
+    if not reads:
+        fc = {"probabilities": [], "top10": []}
+    else:
+        fc = forecast(reads)
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "forecast.json"), "w", encoding="utf-8") as fh:
         json.dump(fc, fh, separators=(",", ":"), sort_keys=True)
-
 
 if __name__ == "__main__":
     main()
